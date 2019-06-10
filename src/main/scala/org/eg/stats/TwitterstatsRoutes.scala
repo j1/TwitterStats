@@ -7,26 +7,14 @@ import org.http4s.dsl.Http4sDsl
 
 object TwitterstatsRoutes {
 
-  def jokeRoutes[F[_]: Sync](J: Jokes[F]): HttpRoutes[F] = {
+  def tweetStatsRoutes[F[_]: Sync](api: TweetStatsApi[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     HttpRoutes.of[F] {
-      case GET -> Root / "joke" =>
+      case GET -> Root / "stats" =>
         for {
-          joke <- J.get
-          resp <- Ok(joke)
-        } yield resp
-    }
-  }
-
-  def helloWorldRoutes[F[_]: Sync](H: HelloWorld[F]): HttpRoutes[F] = {
-    val dsl = new Http4sDsl[F]{}
-    import dsl._
-    HttpRoutes.of[F] {
-      case GET -> Root / "hello" / name =>
-        for {
-          greeting <- H.hello(HelloWorld.Name(name))
-          resp <- Ok(greeting)
+          stats <- api.stats
+          resp <- Ok(stats)
         } yield resp
     }
   }
