@@ -1,11 +1,10 @@
 package org.eg.stats
 
-import java.util.concurrent.{ExecutorService, Executors}
+import java.util.concurrent.Executors
 
 import cats.effect._
-import fs2.io.stdout
-import fs2.text.{lines, utf8Encode}
 import fs2.{Pipe, Stream}
+import io.circe.Decoder.Result
 import io.circe.Json
 import jawnfs2._
 import org.http4s._
@@ -25,16 +24,17 @@ class TweetStream[F[_]](implicit F: ConcurrentEffect[F], cs: ContextShift[F]) {
   implicit val f: RawFacade[Json] = io.circe.jawn.CirceSupportParser.facade
 
   //noinspection TypeParameterShadow - F[_] shadows
-  def deriveStats[F[_], J <: Json](ec: ExecutionContext): Pipe[F,J,J] = {
-    import TweetStats.Delta
-    in => in.scanChunks(0) { (i, c) =>
+  def deriveStats[F[_], J <: Json](ec: ExecutionContext): Pipe[F,J,J] =
+    // TODO chunk size and sum up each chunk first...
+    in => in.scanChunks(0L){ (i, c) =>
       ec.execute { () =>
-        val delta = Delta(totalCountDelta = c.size)
-        TweetStats.accumulate(delta)
+        c.foreach { tweet: J =>
+          val delta: Result[Delta1] = Delta1.fromTweet(tweet)
+          delta.foreach(TweetStats.accumulate)
+        }
       }
       (i + c.size, c)
     }
-  }
 
   /* These values are created by a Twitter developer web app.
    * OAuth signing is an effect due to generating a nonce for each `Request`.

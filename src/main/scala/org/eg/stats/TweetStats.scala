@@ -11,9 +11,13 @@ import io.circe.Json
 
 import scala.concurrent.ExecutionContext
 
-case class Tweet(id: BigInt)
-
-final case class TweetStats(totalCount: Int)
+final case class TweetStats(totalCount: Int) {
+  def add(delta: Delta1): TweetStats = {
+    TweetStats(
+      totalCount = totalCount + 1
+    )
+  }
+}
 
 object TweetStats {
 
@@ -21,19 +25,10 @@ object TweetStats {
 
   private [stats] val currentStats = new AtomicReference[TweetStats](empty)
 
-  final case class Delta(totalCountDelta: Int)
-  object Delta extends Monoid[Delta] {
-    override def empty: Delta = Delta(totalCountDelta = 0)
-    override def combine(x: Delta, y: Delta): Delta = Delta(
-      totalCountDelta = x.totalCountDelta + y.totalCountDelta)
-  }
-
-  implicit val monoidOfDeltas: Monoid[Delta] = Delta
-
   /** @return updated tweet-stats */
-  private [stats] def accumulate(delta: Delta): TweetStats =
-    currentStats.accumulateAndGet(empty, (current: TweetStats, _) =>
-      current.copy(totalCount = current.totalCount + delta.totalCountDelta)
+  private [stats] def accumulate(delta: Delta1): TweetStats =
+    currentStats.accumulateAndGet(empty,
+      (current: TweetStats, _) => current.add(delta)
     )
 
   import io.circe._, io.circe.generic.semiauto._

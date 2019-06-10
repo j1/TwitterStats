@@ -1,14 +1,10 @@
 package org.eg.stats
 
-import cats.effect.{ConcurrentEffect, ContextShift, ExitCode, IO, Timer}
+import cats.effect.IO
 import io.circe.Json
-import org.http4s._
-import org.http4s.implicits._
-import org.http4s.server.middleware.Logger
+import io.circe.generic.auto._
 import org.scalatest.{AsyncWordSpec, BeforeAndAfter, Matchers}
-
-import scala.concurrent.duration._
-import scala.concurrent.Future
+import twitter4s.entities.Tweet
 
 class TweetStreamSpec extends AsyncWordSpec with Matchers with IOTest with BeforeAndAfter
 {
@@ -23,7 +19,8 @@ class TweetStreamSpec extends AsyncWordSpec with Matchers with IOTest with Befor
         result <- tweetStreamSample.compile.toVector
       } yield {
         result.size shouldEqual SampleSize
-        TweetStats.currentStats.get().totalCount shouldEqual before.totalCount + SampleSize
+        val countedTweets = result.count(json => json.as[Tweet].isRight)
+        TweetStats.currentStats.get().totalCount shouldEqual before.totalCount + countedTweets
       }
     }
   }
