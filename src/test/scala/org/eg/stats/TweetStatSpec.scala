@@ -37,5 +37,5 @@ class TweetStatSpec extends AsyncWordSpec with Matchers with IOTest {
     tweetStatsResp.map(_.status shouldEqual Status.Ok)
 
   private[this] def uriReturnsStats() =
-    tweetStatsResp.flatMap(_.as[TweetStats].map(_.totalCount should be >= 0))
+    tweetStatsResp.flatMap(_.as[TweetStatsPresentation].map(_.totalCount should be >= 0L))
 }

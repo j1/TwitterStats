@@ -25,7 +25,7 @@ class TweetStream[F[_]](implicit F: ConcurrentEffect[F], cs: ContextShift[F]) {
 
   //noinspection TypeParameterShadow - F[_] shadows
   def deriveStats[F[_], J <: Json](ec: ExecutionContext): Pipe[F,J,J] =
-    // TODO chunk size and sum up each chunk first...
+    // TODO optimize chunk size and sum up each chunk first...
     in => in.scanChunks(0L){ (i, c) =>
       ec.execute { () =>
         c.foreach { tweet: J =>

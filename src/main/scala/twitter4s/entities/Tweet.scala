@@ -12,3 +12,13 @@ final case class Tweet(created_at: String,
                        text: String,
                        truncated: Boolean = false
                       )
+{
+  def textAndEntities: (String, Option[Entities]) = {
+    // if it is truncated, use the extended_tweet
+    // per https://developer.twitter.com/en/docs/tweets/tweet-updates
+    if(truncated) extended_tweet.fold(
+      ifEmpty = (text, entities)
+    )(ext => (ext.full_text, ext.entities))
+    else (text, entities)
+  }
+}

@@ -1,45 +1,240 @@
 package org.eg.stats
 
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicReference
-import java.util.function.BinaryOperator
 
 import cats.Applicative
 import cats.effect.Sync
-import cats.kernel.Monoid
-import fs2.Pipe
-import io.circe.Json
+import utils.Ring
 
-import scala.concurrent.ExecutionContext
+import scala.collection.{SortedMap, SortedSet}
+import scala.util.Try
 
-final case class TweetStats(totalCount: Int) {
+case class TweetStatsPresentation(
+  totalCount: Long,
+  startedAt: Instant,
+  lastTweetAt: Instant,
+  currentRate: TweetRate,
+  averageRate: TweetRate,
+  topHashTags: Seq[(String, Int)],
+  percentWithUrl: Float,
+  percentWithPhoto: Float,
+  topDomains: Seq[(String, Int)]
+)
+
+final case class TweetStats (
+                              totalCount: Long,
+                              latestTweetAt: Instant,
+                              recentCounts: RecentCounts,
+                              topHashTags: TopCounts,
+                              totalWithUrl: Long,
+                              totalWithPhotoUrl: Long,
+                              topDomains: TopCounts
+) {
+  import TweetStats._
+  import utils.Utils._
+
   def add(delta: Delta1): TweetStats = {
+    val createdAt = delta.created_instant.getOrElse(Instant.now)
     TweetStats(
-      totalCount = totalCount + 1
+      totalCount = totalCount + 1,
+      latestTweetAt = delta.created_instant
+        .fold(_ => latestTweetAt, x => laterOf(latestTweetAt, x)),
+      recentCounts = recentCounts.countThis(delta.created_instant),
+      topHashTags = topHashTags.add(delta.hashtags, tweetedAt = createdAt),
+      totalWithUrl = totalWithPhotoUrl + countIf(delta.hasUrl),
+      totalWithPhotoUrl = totalWithPhotoUrl + countIf(delta.hasPhotoUrl),
+      topDomains = topDomains.add(delta.urls.map(Delta1.domainOf), tweetedAt = createdAt)
+    )
+  }
+
+  def present: TweetStatsPresentation = TweetStatsPresentation(
+    totalCount = totalCount,
+    lastTweetAt = latestTweetAt,
+    startedAt = TweetStats.startedAt.get.getOrElse(Instant.EPOCH),
+    currentRate = recentCounts.rate,
+    averageRate = averageRate,
+    topHashTags = topHashTags.top,
+    percentWithUrl = percentOf(totalWithUrl, totalCount),
+    percentWithPhoto = percentOf(totalWithPhotoUrl, totalCount),
+    topDomains = topDomains.top
+  )
+
+  private def averageRate: TweetRate = startedAt.get.fold(ifEmpty = TweetRate.empty) { start =>
+    val duration = start.until(latestTweetAt, ChronoUnit.MILLIS)
+    if (duration ==0) TweetRate.empty
+    else TweetRate(
+      perHour = (totalCount * 1000 * 3600 / duration).toInt,
+      perMin = (totalCount * 1000 * 60 / duration).toInt,
+      perSec = (totalCount * 1000 / duration).toInt
     )
   }
 }
 
 object TweetStats {
 
-  val empty= TweetStats(totalCount = 0)
+  val empty = TweetStats(totalCount = 0, latestTweetAt = Instant.EPOCH,
+    recentCounts = RecentCounts.empty,
+    topHashTags = TopCounts.empty,
+    totalWithUrl = 0,
+    totalWithPhotoUrl = 0,
+    topDomains = TopCounts.empty)
 
-  private [stats] val currentStats = new AtomicReference[TweetStats](empty)
+  private[stats] val currentStats = new AtomicReference[TweetStats](empty)
+
+  val startedAt: AtomicReference[Option[Instant]] = new AtomicReference(None)
 
   /** @return updated tweet-stats */
-  private [stats] def accumulate(delta: Delta1): TweetStats =
+  private[stats] def accumulate(delta: Delta1): TweetStats = {
+    // record the arrival time of first tweet
+    startedAt.compareAndSet(
+      /* expect */ None,
+      /* update */ Some(Instant.now))
+
     currentStats.accumulateAndGet(empty,
       (current: TweetStats, _) => current.add(delta)
-    )
+    )}
+}
 
-  import io.circe._, io.circe.generic.semiauto._
+/**
+  * keeps a running window of cumulative counts for the past 1hour == 3600sec
+  * @param count count of tweets in each tick, for 359 seconds
+  * @param lastTick optional pair of:
+  *                 instant when last tick started, in epoch seconds
+  *                 count in the lastTick, which may not be filled up yet
+  **/
+case class RecentCounts(count: Ring[Int],
+                        lastTick: Option[(Long, Int)])
+{
+  def countThis(created_instant: Try[Instant]): RecentCounts = created_instant.fold(
+    _ => this.copy(lastTick = lastTick.map{ case (tick, countPerTick) => (tick, countPerTick + 1)}),
+    t => {
+      this.lastTick.map{ case (lastTick: Long, lastCount) =>
+        if (t.getEpochSecond > lastTick) {
+          // increment the lastTick
+          ???
+        } else {
+          // push the lastTick into the ringh and start a new lastTick
+          ???
+        }
+      }
+      this
+    }
+  )
+
+  def rate: TweetRate = TweetRate.empty
+
+}
+object RecentCounts {
+  val empty = RecentCounts(count = Ring[Int](359)(), lastTick = None)
+}
+
+/**
+  * @param countMap a sorted map of:
+  *   item (e.g. hashtag) ==> (from, to, count)
+  *   count = number of tweets between (from, to)
+  * @param ordering a sorted set of the same elements as countMap. However,
+  *                 these are sorted so that high priority elements are last. So,
+  *                 ordering.head is the least priority element.
+  */
+case class TopCounts(countMap: SortedMap[String, (Instant, Instant, Int)],
+                     ordering: SortedSet[TopCounts.Entry]) {
+  import utils.Utils.laterOf
+  import TopCounts._
+
+  /** item is either hashtag or domain */
+  def add(items: Seq[String], tweetedAt: Instant): TopCounts = items.foldLeft(this){
+    case (out: TopCounts, item: String) =>
+      val entry = out.countMap.get(item).map(item -> _)
+      entry.fold{
+        val newEntry = item -> (tweetedAt, tweetedAt, 1)
+        val N = out.countMap.size
+        assert(N <= KEEP_NO_MORETHAN && N == out.ordering.size)
+        if (N < KEEP_NO_MORETHAN)
+          out.copy(
+            countMap = out.countMap + newEntry,
+            ordering = out.ordering + newEntry)
+        else {
+          // TODO make room for newEntry in bulk...
+          val rmEntry = out.ordering.head
+          out.copy(
+            countMap = out.countMap - rmEntry._1 + newEntry,
+            ordering = out.ordering - rmEntry + newEntry)
+        }
+      }{ entry =>
+        // increment the count of entry and update the timestamp
+        assert(out.ordering.contains(entry))
+        val (_, (from, to, count)) = entry
+        val entryUpdated = entry._1 -> (from, laterOf(to, tweetedAt), count + 1)
+        out.copy(
+          countMap = out.countMap + entryUpdated,
+          ordering = out.ordering - entry + entryUpdated)
+      }
+  }
+
+  def top: Seq[(String, Int)] = {
+    countMap.toSeq.map{ case (item, (_, _, count)) => (item, count) }
+      .sortBy(- _._2) // descending order by count
+      .take(TOP_COUNT)
+  }
+}
+object TopCounts {
+  val empty = TopCounts(
+    countMap = SortedMap.empty,
+    ordering = SortedSet.empty(PriorityOrdering))
+
+  val KEEP_NO_MORETHAN = 1000
+  val TOP_COUNT = 10
+
+  /** item (e.g. hashtag) -->  (from, to, count)*/
+  type Entry = (String, (Instant, Instant, Int))
+
+  object PriorityOrdering extends Ordering[Entry] {
+    // return positive if x is higher priority than y, for int this is x - y
+    override def compare(x: Entry, y: Entry): Int = {
+      // TODO we want to remove stale entries that have been sitting for long time, but not changing their count
+      //      if they are not in the top. The idea is to keep those items which have a "potential" to grow.
+      //      Has to come up with better algorithm
+      val (item1, (t1, _,n1)) = x
+      val (item2, (t2, _,n2)) = y
+
+      val dn = n1 - n2 // higher counts preferred
+      if (dn == 0) {
+        val dt = t1.compareTo(t2) // // order by the youth, i.e. when this item started counting. newer preferred
+        if (dt == 0) item1.compareTo(item2) // need this for ordering the set without collisions
+        else dt
+      } else dn
+    }
+  }
+
+}
+
+case class TweetRate(perHour: Int, perMin: Int, perSec: Int)
+object TweetRate {
+  val empty = TweetRate(0, 0, 0)
+}
+
+object TweetStatsPresentation {
+
+  import Delta1.{instant2Str, str2instant}
+  import io.circe._
+  import io.circe.generic.semiauto._
   import org.http4s.circe._
   import org.http4s.{EntityDecoder, EntityEncoder}
 
-  implicit val tweetStatsDecoder: Decoder[TweetStats] = deriveDecoder[TweetStats]
-  implicit def tweetStatsEntityDecoder[F[_]: Sync]: EntityDecoder[F, TweetStats] =
-    jsonOf
+  implicit val encodeInstant: Encoder[Instant] = Encoder.encodeString.contramap[Instant](instant2Str)
+  implicit val decodeInstant: Decoder[Instant] = Decoder.decodeString.emap { str =>
+    str2instant(str).toEither.left.map(_.toString)
+  }
 
-  implicit val tweetStatsEncoder: Encoder[TweetStats] = deriveEncoder[TweetStats]
-  implicit def tweetStatsEntityEncoder[F[_]: Applicative]: EntityEncoder[F, TweetStats] =
+  implicit val rateDecoder: Decoder[TweetRate] = deriveDecoder
+  implicit val rateEncoder: Encoder[TweetRate] = deriveEncoder
+
+  implicit val tweetStatsDecoder: Decoder[TweetStatsPresentation] = deriveDecoder
+  implicit def tweetStatsEntityDecoder[F[_]: Sync]: EntityDecoder[F, TweetStatsPresentation] =
+    jsonOf
+  implicit val tweetStatsEncoder: Encoder[TweetStatsPresentation] = deriveEncoder
+  implicit def tweetStatsEntityEncoder[F[_]: Applicative]: EntityEncoder[F, TweetStatsPresentation] =
     jsonEncoderOf
 }
