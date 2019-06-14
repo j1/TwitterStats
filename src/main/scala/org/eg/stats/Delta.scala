@@ -76,7 +76,8 @@ object Delta1 {
           _.hashtags.map(_.text)),
         urls = entities.fold(
           ifEmpty = Seq.empty[URI])(
-          _.urls.map(x => new URI(x.url)))
+          //entities.urls.url is of the form "t.co/...", so use expanded_url to get the original URL
+          _.urls.map(x => new URI(x.expanded_url)))
       )
     }
   }
