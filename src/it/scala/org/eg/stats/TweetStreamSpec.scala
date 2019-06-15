@@ -8,7 +8,7 @@ import twitter4s.entities.Tweet
 
 class TweetStreamSpec extends AsyncWordSpec with Matchers with IOTest with BeforeAndAfter
 {
-  val SampleSize = 5
+  val SampleSize = 1010
 
   val tweetStreamSample: fs2.Stream[IO, Json] = new TweetStream[IO].stream.take(SampleSize)
 

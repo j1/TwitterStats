@@ -1,5 +1,6 @@
 package org.eg.stats
 
+//TODO move to config file, which should not be public
 object Secrets {
   //Consumer API keys
   val consumerApiKey = "sCc6uZzvvt5FBIkOGo60jkb3V"

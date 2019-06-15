@@ -1,0 +1,195 @@
+{
+  "totalCount": 9674,
+  "startedAt": "Sat Jun 15 20:47:47 +0000 2019",
+  "lastTweetAt": "Sat Jun 15 20:52:44 +0000 2019",
+  "currentRate": {
+    "perHour": 0,
+    "perMin": 0,
+    "perSec": 0
+  },
+  "averageRate": {
+    "perHour": 117615,
+    "perMin": 1960,
+    "perSec": 32
+  },
+  "topEmojis": [
+    [
+      {
+        "shortName": "joy",
+        "codepoints": [
+          128514
+        ]
+      },
+      551
+    ],
+    [
+      {
+        "shortName": "sob",
+        "codepoints": [
+          128557
+        ]
+      },
+      216
+    ],
+    [
+      {
+        "shortName": "heart",
+        "codepoints": [
+          10084,
+          65039
+        ]
+      },
+      123
+    ],
+    [
+      {
+        "shortName": "rolling_on_the_floor_laughing",
+        "codepoints": [
+          129315
+        ]
+      },
+      112
+    ],
+    [
+      {
+        "shortName": "skin-tone-2",
+        "codepoints": [
+          127995
+        ]
+      },
+      107
+    ],
+    [
+      {
+        "shortName": "heart_eyes",
+        "codepoints": [
+          128525
+        ]
+      },
+      106
+    ],
+    [
+      {
+        "shortName": "clap",
+        "codepoints": [
+          128079
+        ]
+      },
+      86
+    ],
+    [
+      {
+        "shortName": "two_hearts",
+        "codepoints": [
+          128149
+        ]
+      },
+      83
+    ],
+    [
+      {
+        "shortName": "fire",
+        "codepoints": [
+          128293
+        ]
+      },
+      81
+    ],
+    [
+      {
+        "shortName": "rose",
+        "codepoints": [
+          127801
+        ]
+      },
+      79
+    ]
+  ],
+  "percentWithEmojis": 0.1968162,
+  "topHashTags": [
+    [
+      "زملكاوي_راسك_للارض",
+      25
+    ],
+    [
+      "BTS",
+      22
+    ],
+    [
+      "PremiosMTVMIAW",
+      19
+    ],
+    [
+      "방탄소년단",
+      19
+    ],
+    [
+      "BTS5THMUSTER",
+      18
+    ],
+    [
+      "GOT7",
+      12
+    ],
+    [
+      "CHONGOPERU4NO",
+      11
+    ],
+    [
+      "STASM",
+      11
+    ],
+    [
+      "갓세븐",
+      10
+    ],
+    [
+      "MTVBRFANDOMLITTLEMONSTERS",
+      8
+    ]
+  ],
+  "percentWithUrl": 0.0026876163,
+  "percentWithPhoto": 0.0026876163,
+  "topDomains": [
+    [
+      "twitter.com",
+      448
+    ],
+    [
+      "du3a.org",
+      97
+    ],
+    [
+      "facebook.com",
+      57
+    ],
+    [
+      "bit.ly",
+      43
+    ],
+    [
+      "youtu.be",
+      42
+    ],
+    [
+      "curiouscat.me",
+      27
+    ],
+    [
+      "instagram.com",
+      27
+    ],
+    [
+      "youtube.com",
+      17
+    ],
+    [
+      "showroom-live.com",
+      14
+    ],
+    [
+      "co.uk",
+      9
+    ]
+  ]
+}
