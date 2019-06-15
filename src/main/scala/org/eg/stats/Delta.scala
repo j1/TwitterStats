@@ -9,6 +9,7 @@ import io.circe.Decoder.Result
 import io.circe.Json
 import twitter4s.entities.{HashTag, Tweet}
 import utils.Emojis
+import utils.Emojis.Emoji
 
 import scala.util.Try
 
@@ -18,7 +19,7 @@ case class Delta1
   created_at: String,
 
   /** The following may contain duplicates of emojis, hashtags etc.*/
-  emojis: Seq[Int], // unicode codepoints
+  emojis: Seq[Emoji],
   hashtags: Seq[String],
   urls: Seq[URI]
 ) {
@@ -37,18 +38,6 @@ object Delta1 {
     "pic.twitter.com", "pbs.twimg.com", "instagram.com"
   )
   def isPhotoUrl(url: URI): Boolean = KnownPhotoDomains.exists(url.getHost.contains(_))
-  def domainOf(url: URI): String = domainOf(url.getHost)
-    .getOrElse(InvalidDomain)
-
-  val InvalidDomain = "null.invalid"
-
-  private [stats] def domainOf(host: String): Option[String] = {
-    val Dot = '.'
-    val lastDotPos = host.lastIndexOf(Dot)
-    val secondLastDotPos = host.lastIndexWhere(_==Dot, lastDotPos-1)
-    val domainStartPos = if (secondLastDotPos < 0) 0 else secondLastDotPos + 1
-    if(lastDotPos >= 0) Some(host.substring(domainStartPos, host.length)) else None
-  }
 
   private val TwitterFmt = DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss ZZZ yyyy")
 
@@ -57,20 +46,19 @@ object Delta1 {
     .format(TwitterFmt)
 
   val empty = Delta1(created_at = instant2Str(Instant.EPOCH),
-    emojis = Seq.empty[Int],
+    emojis = Seq.empty[Emoji],
     hashtags = Seq.empty[String],
     urls = Seq.empty[URI])
 
   def fromTweet(json: Json): Result[Delta1] = {
     import io.circe.generic.auto._, io.circe.syntax._
     val tweet: Result[Tweet] = json.as[Tweet]
-    val emojis = Seq()//Emojis.get
     tweet.map {t =>
       val (text, entities) = t.textAndEntities
       val emojis = Seq()
       Delta1(
         created_at = t.created_at,
-        emojis = emojis,
+        emojis = Emojis.emojisIn(text),
         hashtags = entities.fold(
           ifEmpty = Seq.empty[String])(
           _.hashtags.map(_.text)),

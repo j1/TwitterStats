@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import cats.Applicative
 import cats.effect.Sync
+import utils.Emojis.Emoji
 import utils.Ring
 
 import scala.collection.{SortedMap, SortedSet}
@@ -17,6 +18,8 @@ case class TweetStatsPresentation(
   lastTweetAt: Instant,
   currentRate: TweetRate,
   averageRate: TweetRate,
+  topEmojis: Seq[(Emoji, Int)],
+  percentWithEmojis: Float,
   topHashTags: Seq[(String, Int)],
   percentWithUrl: Float,
   percentWithPhoto: Float,
@@ -27,10 +30,12 @@ final case class TweetStats (
                               totalCount: Long,
                               latestTweetAt: Instant,
                               recentCounts: RecentCounts,
-                              topHashTags: TopCounts,
+                              topEmojis: TopCounts[Emoji],
+                              totalWithEmoji: Long,
+                              topHashTags: TopCounts[String],
                               totalWithUrl: Long,
                               totalWithPhotoUrl: Long,
-                              topDomains: TopCounts
+                              topDomains: TopCounts[String]
 ) {
   import TweetStats._
   import utils.Utils._
@@ -42,10 +47,12 @@ final case class TweetStats (
       latestTweetAt = delta.created_instant
         .fold(_ => latestTweetAt, x => laterOf(latestTweetAt, x)),
       recentCounts = recentCounts.countThis(delta.created_instant),
+      topEmojis = topEmojis.add(delta.emojis, tweetedAt = createdAt),
+      totalWithEmoji = totalWithEmoji + countIf(delta.hasEmoji),
       topHashTags = topHashTags.add(delta.hashtags, tweetedAt = createdAt),
       totalWithUrl = totalWithPhotoUrl + countIf(delta.hasUrl),
       totalWithPhotoUrl = totalWithPhotoUrl + countIf(delta.hasPhotoUrl),
-      topDomains = topDomains.add(delta.urls.map(Delta1.domainOf), tweetedAt = createdAt)
+      topDomains = topDomains.add(delta.urls.map(domainOf), tweetedAt = createdAt)
     )
   }
 
@@ -55,6 +62,8 @@ final case class TweetStats (
     startedAt = TweetStats.startedAt.get.getOrElse(Instant.EPOCH),
     currentRate = recentCounts.rate,
     averageRate = averageRate,
+    topEmojis = topEmojis.top,
+    percentWithEmojis = percentOf(totalWithEmoji, totalCount),
     topHashTags = topHashTags.top,
     percentWithUrl = percentOf(totalWithUrl, totalCount),
     percentWithPhoto = percentOf(totalWithPhotoUrl, totalCount),
@@ -76,6 +85,8 @@ object TweetStats {
 
   val empty = TweetStats(totalCount = 0, latestTweetAt = Instant.EPOCH,
     recentCounts = RecentCounts.empty,
+    topEmojis = TopCounts.empty,
+    totalWithEmoji = 0,
     topHashTags = TopCounts.empty,
     totalWithUrl = 0,
     totalWithPhotoUrl = 0,
@@ -138,14 +149,13 @@ object RecentCounts {
   *                 these are sorted so that high priority elements are last. So,
   *                 ordering.head is the least priority element.
   */
-case class TopCounts(countMap: SortedMap[String, (Instant, Instant, Int)],
-                     ordering: SortedSet[TopCounts.Entry]) {
+case class TopCounts[T](countMap: SortedMap[T, (Instant, Instant, Int)],
+                        ordering: SortedSet[TopCounts.Entry[T]]) {
   import utils.Utils.laterOf
   import TopCounts._
 
   /** item is either hashtag or domain */
-  def add(items: Seq[String], tweetedAt: Instant): TopCounts = items.foldLeft(this){
-    case (out: TopCounts, item: String) =>
+  def add(items: Seq[T], tweetedAt: Instant): TopCounts[T] = items.foldLeft(this){ (out: TopCounts[T], item: T) =>
       val entry = out.countMap.get(item).map(item -> _)
       entry.fold{
         val newEntry = item -> (tweetedAt, tweetedAt, 1)
@@ -173,26 +183,26 @@ case class TopCounts(countMap: SortedMap[String, (Instant, Instant, Int)],
       }
   }
 
-  def top: Seq[(String, Int)] = {
+  def top: Seq[(T, Int)] = {
     countMap.toSeq.map{ case (item, (_, _, count)) => (item, count) }
       .sortBy(- _._2) // descending order by count
       .take(TOP_COUNT)
   }
 }
 object TopCounts {
-  val empty = TopCounts(
-    countMap = SortedMap.empty,
-    ordering = SortedSet.empty(PriorityOrdering))
+  /** item (e.g. hashtag) -->  (from, to, count)*/
+  type Entry[T] = (T, (Instant, Instant, Int))
+
+  def empty[T <: Comparable[T]]: TopCounts[T] = TopCounts[T](
+    countMap = SortedMap.empty[T, (Instant, Instant, Int)],
+    ordering = SortedSet.empty(new PriorityOrdering[T]))
 
   val KEEP_NO_MORETHAN = 1000
   val TOP_COUNT = 10
 
-  /** item (e.g. hashtag) -->  (from, to, count)*/
-  type Entry = (String, (Instant, Instant, Int))
-
-  object PriorityOrdering extends Ordering[Entry] {
+  class PriorityOrdering[T <: Comparable[T]] extends Ordering[Entry[T]] {
     // return positive if x is higher priority than y, for int this is x - y
-    override def compare(x: Entry, y: Entry): Int = {
+    override def compare(x: Entry[T], y: Entry[T]): Int = {
       // TODO we want to remove stale entries that have been sitting for long time, but not changing their count
       //      if they are not in the top. The idea is to keep those items which have a "potential" to grow.
       //      Has to come up with better algorithm
@@ -222,6 +232,15 @@ object TweetStatsPresentation {
   import io.circe.generic.semiauto._
   import org.http4s.circe._
   import org.http4s.{EntityDecoder, EntityEncoder}
+  val empty = TweetStatsPresentation(
+    totalCount = 0, startedAt = Instant.EPOCH, lastTweetAt = Instant.EPOCH,
+    currentRate = TweetRate.empty, averageRate = TweetRate.empty,
+    topEmojis = Seq.empty, percentWithEmojis = 0,
+    topHashTags = Seq.empty,
+    percentWithPhoto = 0,
+    percentWithUrl = 0,
+    topDomains = Seq.empty
+  )
 
   implicit val encodeInstant: Encoder[Instant] = Encoder.encodeString.contramap[Instant](instant2Str)
   implicit val decodeInstant: Decoder[Instant] = Decoder.decodeString.emap { str =>
@@ -230,6 +249,9 @@ object TweetStatsPresentation {
 
   implicit val rateDecoder: Decoder[TweetRate] = deriveDecoder
   implicit val rateEncoder: Encoder[TweetRate] = deriveEncoder
+
+  implicit val emojiDecoder: Decoder[Emoji] = deriveDecoder
+  implicit val emojiEncoder: Encoder[Emoji] = deriveEncoder
 
   implicit val tweetStatsDecoder: Decoder[TweetStatsPresentation] = deriveDecoder
   implicit def tweetStatsEntityDecoder[F[_]: Sync]: EntityDecoder[F, TweetStatsPresentation] =
