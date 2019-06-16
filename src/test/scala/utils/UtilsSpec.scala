@@ -50,5 +50,10 @@ class UtilsSpec extends WordSpec with Matchers {
       domainOf("ha ha") shouldEqual None
       domainOf("") shouldEqual None
     }
+    "handle domains like x.co.uk" in {
+      domainOf(new URI("http://www.bp.co.uk")) shouldEqual "bp.co.uk"
+      domainOf(new URI("http://abcd.aws.amazon.com")) shouldEqual "amazon.com"
+      domainOf(new URI("http://a.b.c.d")) shouldEqual "c.d"
+    }
   }
 }

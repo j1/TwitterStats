@@ -11,7 +11,7 @@ lazy val root = (project in file("."))
     
     Defaults.itSettings,
     libraryDependencies ++= http4sDeps ++ circeDeps ++ Seq(
-      betterFiles,
+      betterFiles, guava,
       scalaTest % "it,test", scalaCheck % "it,test",
       logback
     ),
