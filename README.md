@@ -1,6 +1,6 @@
 # Twitter Statistics
 
-##Design Trade offs
+## Design Trade offs
 
 * Functional streams and effects
 * Actors (akka) and futures
@@ -10,8 +10,8 @@ Storage choices
 * persistent streams -> event sourcing
 * relational / NSQL database
 
-##Design
-###Chosen
+## Design
+### Chosen
 * Asynchronous, no blocking. On one node, this scales up by simply upgrading hardware with more
   multi-cores (threads) and memory.
 * Functional streams (fs2 / http4s): 
@@ -34,12 +34,12 @@ The deltas are merged into Twitter Statistics. This is the only mutable variable
 This one and only mutable variable is modified in a thread-safe way by tasks in a separate executor
 dedicated (fixed thread pool) for this purpose. All other code is made of functions on immutable data. 
 
-###Scope
+### Scope
   
 In the current implementation, subscribed to one  sample endpoint and statistics are derived asynchronously 
 from the tweet-stream on one node (virtual machine). This can be scaled up in the following ways
 
-###Scaling up
+### Scaling up
 - On one node, we can scale it up by increasing processors and memory. This non-blocking program
   scales up to take advantage of all threads / CPUs.
 - N connections to twitter: multiple client nodes connect to twitter servers in parallel and process
@@ -56,9 +56,9 @@ from the tweet-stream on one node (virtual machine). This can be scaled up in th
   for keeping a record of tweets, going back in history, testing, validations etc.
 - Or use a database for storage (SQL or NSQL depending on queries needed)
 
-##Statistics calculation
+## Statistics calculation
 
-###Average Tweet Rate
+### Average Tweet Rate
 Average tweet rate at current instant is calculated by dividing the total tweet with how much time elapsed from the beginning.
 
 ### Emoji Parsing
