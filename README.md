@@ -50,7 +50,7 @@ from the tweet-stream on one node (virtual machine). This can be scaled up in th
   Because of this delta streams can be split, processed concurrently and combined as per load.
   To process streams across multiple nodes needs a distributed messaging system (kafka cluster)
 
-## Tweet Storage
+### Tweet Storage
 - persistent streams, e.g. distributed transaction log of kafka messages. Then, any state of the past
   twitter statistics can be reconstructed by replaying the log (cf. "event sourcing"). This is useful
   for keeping a record of tweets, going back in history, testing, validations etc.
@@ -65,7 +65,15 @@ Average tweet rate at current instant is calculated by dividing the total tweet 
 - Each emoji is designated by a sequence of unicode code points in the json-field "unified" of emoji_data.json
   * Emoji modifiers such as skin tone variations are considered to be the same emoji
   * Emoji ZWJ sequences are considered as separate emojis
-  
+
+## Unit and Integration Tests
+[IOTest](src/main/scala/org/eg/stats/IOTest.scala)is a trait similar to IOApp, and is intended to facililitate
+async tests similar to scaltest AsyncFlatTest, but with cats IO instead of future. This way, test code is pure as possible,
+and is not sprinkled with IO runs like `unsafeRunSync`.
+
+Integration Tests are placed in a separate folder (it/) at the top level (along with main/, test/). These connect to the
+sample twitter stream.
+
 # Performance measurement
 
 # Further Work
